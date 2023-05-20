@@ -199,7 +199,70 @@ struct CopySyntaxTree : Transformer
 	~CopySyntaxTree() { };
 };
 
+struct FoldConstants : Transformer
+{
+	Expression* transformNumber(Number const* number)
+	{
+		Expression* exp = new Number(number->value());
+		return exp;
+		// числа не сворачиваются, поэтому просто возвращаем копию
+	}
+	Expression* transformBinaryOperation(BinaryOperation const* binop)
+	{
+		// Создаем указатели на левое и правое выражение
+		Expression* nleft = (binop->left())->transform(this); // рекурсивно уходим в левый операнд, чтобы свернуть
+		Expression* nright = (binop->right())->transform(this); // рекурсивно уходим в правый операнд, чтобы свернуть
+		int noperation = binop->operation();
 
+		// Создаем новый объект типа BinaryOperation с новыми указателями
+		BinaryOperation* nbinop = new BinaryOperation(nleft, noperation, nright);
+		//Проверяем на приводимость указателей к типу Number
+		Number* nleft_is_number = dynamic_cast<Number*>(nleft);
+		Number* nright_is_number = dynamic_cast<Number*>(nright);
+		if (nleft_is_number && nright_is_number) {
+			// Вычисляем значение выражения
+			Expression* result = new Number(binop->evaluate());
+			// Освобождаем память
+			delete nbinop;
+			//Возвращаем результат
+			return result;
+		}
+		else {
+			return nbinop;
+		}
+
+	}
+	Expression* transformFunctionCall(FunctionCall const* fcall)
+	{
+		// Создаем указатель на аргумент
+		Expression* arg = (fcall->arg())->transform(this);// рекурсивно сворачиваем аргумент
+		std::string const& nname = fcall->name();
+
+		// Создаем новый объект типа FunctionCall с новым указателем
+		FunctionCall* nfcall = new FunctionCall(nname, arg);
+
+		// Проверяем на приводимость указателя к типу Number
+		Number* arg_is_number = dynamic_cast<Number*>(arg);
+		if (arg_is_number) { // если аргумент — число
+			// Вычисляем значение выражения
+			Expression* result = new Number(fcall->evaluate());
+			// Освобождаем память
+			delete nfcall;
+			//Возвращаем результат
+			return result;
+		}
+		else {
+			return nfcall;
+		}
+	}
+	Expression* transformVariable(Variable const* var)
+	{
+		Expression* exp = new Variable(var->name());
+		return exp;
+		// переменные не сворачиваем, поэтому просто возвращаем копию
+	}
+	~FoldConstants() { };
+};
 
 
 int main() {
@@ -233,4 +296,8 @@ int main() {
 	Expression* newExpr = callAbs->transform(&CST);
 	std::cout << newExpr->print() << std::endl;
 	
+	FoldConstants FC;
+	Expression* newExpr2 = callAbs->transform(&FC);
+
+	std::cout << newExpr2->print() << std::endl;
 }
